@@ -4,71 +4,53 @@ import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.techtask.data.Item;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 @RequiredArgsConstructor
 public class PageParser {
     private final String immutableUrlPart;
 
-    public List<Element> getItemNameList() throws IOException {
+    public List<Item> getItemList() throws IOException {
         String nextURL = immutableUrlPart;
-        List<Element> itemList = new ArrayList<>();
-        while (nextURL != null) {
-            Document doc = Jsoup.connect(nextURL).get();
-            List<Element> items = doc.select("div.product").select("div.description").select("div.info-level4").select("a");
-            itemList.addAll(items);
-            nextURL = getNextPageUrl(nextURL);
+        List<Item> itemList = new ArrayList<>();
+        boolean hasNextPage = true;
+        while (hasNextPage) {
+            itemList.addAll(parseItemList(nextURL));
+            Optional<String> nextPageUrl = getNextPageUrl(nextURL);
+            if (nextPageUrl.isPresent()) {
+                nextURL = nextPageUrl.get();
+            } else {
+                hasNextPage = false;
+            }
         }
         return itemList;
     }
 
-    public List<Element> getItemPriceList() throws IOException {
-        String nextURL = immutableUrlPart;
-        List<Element> priceList = new ArrayList<>();
-        while (nextURL != null) {
-            Document doc = Jsoup.connect(nextURL).get();
-            List<Element> pages = doc.select("div.price");
-            priceList.addAll(pages);
-            nextURL = getNextPageUrl(nextURL);
-        }
-        return priceList;
-    }
-
-    public List<String> getItemHrefList() throws IOException {
-        String nextURL = immutableUrlPart;
-        List<String> hrefList = new ArrayList<>();
-        while (nextURL != null) {
-            Document doc = Jsoup.connect(nextURL).get();
-            List<Element> items = doc.select("div.product").select("div.description").select("div.info-level4").select("a");
-            for(Element item : items) {
-                hrefList.add(item.attr("href"));
-            }
-            nextURL = getNextPageUrl(nextURL);
-        }
-        return hrefList;
-    }
-
-    /*private void parsePage(String url) throws IOException {
-        Document doc = Jsoup.connect(url).get();
-        List<Element> items = doc.select("div.product").select("div.description").select("div.info-level4").select("a");
+    public List<Item> parseItemList(String nextURL) throws IOException {
+        List<Item> itemList = new ArrayList<>();
+        Document doc = Jsoup.connect(Objects.requireNonNull(nextURL)).get();
+        List<Element> names = doc.select("div.product").select("div.description").select("div.info-level4").select("a");
         List<Element> prices = doc.select("div.price");
-        int itemCount = items.size();
-        for (int i = 0; i < itemCount; i++) {
-            StringBuilder sb = new StringBuilder();
-            sb.append(items.get(i).text()).append(" ").append(items.get(i).attr("href")).append("  ").append(prices.get(i).text());
-            System.out.println(sb.toString());
+        List<Element> hrefs = doc.select("div.product").select("div.description").select("div.info-level4").select("a");
+        for (int i = 0; i < names.size(); i++) {
+            Item item = new Item(names.get(i).text(), prices.get(i).text(), hrefs.get(i).attr("href"));
+            itemList.add(item);
         }
-    }*/
+        return itemList;
+    }
 
-    private String getNextPageUrl(String currentUrl) throws IOException {
+    private Optional<String> getNextPageUrl(String currentUrl) throws IOException {
         Document doc = Jsoup.connect(currentUrl).get();
         Element nextPageLink = doc.selectFirst("div.pagination > ul.pagination > li > a[rel=next]");
-        if ((nextPageLink != null) && (nextPageLink.text().matches(".*\\d.*"))) {
-            return immutableUrlPart + nextPageLink.attr("href");
+        if (nextPageLink != null) {
+            return Optional.of(immutableUrlPart + nextPageLink.attr("href"));
         }
-        return null;
+        return Optional.empty();
     }
 }
